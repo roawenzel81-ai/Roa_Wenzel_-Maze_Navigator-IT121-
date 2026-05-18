@@ -11,7 +11,7 @@ class Game:
         self.seed = None
         self.saved_row = 0
         self.saved_column = 0
-        self.saved_time_remaining = 120
+        self.saved_time_remaining = 60
 
         self.menu = Main_Menu(self)
         self.save_system = SaveSystem(self)
@@ -28,6 +28,7 @@ class Main_Menu:
         self.root.geometry("1200x500")
         self.root.configure(bg = "black")
         self.root.resizable(False, False)
+        self.instruction_after_id = None
 
         self.label = tk.Label(self.root, text = "Welcome to the Forgotten Labyrinth!", fg = "white", bg = "black", font = ("Arial", "25"))
         self.label.grid(row = 0, column = 0, sticky = "w", padx = 332, pady = 120)
@@ -37,6 +38,10 @@ class Main_Menu:
 
         self.exit = tk.Button(self.root, text = "Exit", font = ("Arial", "18"), command = self.exit_game)
         self.exit.grid(row = 2, column = 0, sticky = "n", padx = 30, pady = 10)
+
+        self.root.grid_columnconfigure(0, weight = 1)
+        self.root.grid_columnconfigure(1, weight = 1)
+        self.root.grid_columnconfigure(2, weight = 1)
     
     # Going back to main menu when you press "Back" button
     def main_menu(self):
@@ -44,43 +49,81 @@ class Main_Menu:
         self.start.grid(row = 1, column = 0, sticky = "n", padx = 30, pady = 10)
         self.exit.grid(row = 2, column = 0, sticky = "n", padx = 30, pady = 10)
 
-        # Forget the gameplay widgets
-        if hasattr(self.game, "gameplay"):
-            if hasattr(self.game.gameplay, "canvas"):
-                self.game.gameplay.canvas.destroy()
+        self.gameplay = getattr(self.game, "gameplay", None)
 
-        if hasattr(self, "instruction_title"):
-            self.instruction_title.grid_forget()
+        if self.gameplay:
+            # Stop clock
+            if hasattr(self.gameplay, "clock"):
+                self.gameplay.clock.running = False
 
-        if hasattr(self, "movement_ins"):
-            self.movement_ins.grid_forget()
+                if self.gameplay.clock.after_id:
+                    try:
+                        self.root.after_cancel(self.gameplay.clock.after_id)
+                    except:
+                        pass
 
-        if hasattr(self, "start_game"):
-            self.start_game.grid_forget()
+                try:
+                    if self.gameplay.clock.timer_label.winfo_exists():
+                        self.gameplay.clock.timer_label.destroy()
+                except:
+                    pass
 
-        if hasattr(self, "back"):
-            self.back.grid_forget()
+            # Destroy canvas
+            if hasattr(self.gameplay, "canvas"):
+                try:
+                    if self.gameplay.canvas.winfo_exists():
+                        self.gameplay.canvas.destroy()
+                except:
+                    pass
 
-        if hasattr(self, "save_and_quittomenu_button"):
-            self.save_and_quittomenu_button.grid_forget()
+            # Destroy player frames
+            if hasattr(self.gameplay, "player"):
+                player = self.gameplay.player
 
-        if hasattr(self, "game_menu_button"):
-            self.game_menu_button.grid_forget()
+                if hasattr(player, "screen_after_id") and player.screen_after_id:
+                    try:
+                        self.root.after_cancel(player.screen_after_id)
+                    except:
+                        pass
 
-        if hasattr(self.game, "gameplay") and hasattr(self.game.gameplay, "player"):
-            if hasattr(self.game.gameplay, "clock"):
-                self.game.gameplay.clock.timer_label.destroy()
-                self.game.gameplay.clock.running = False
+                for frame_name in ["victory_frame", "lost_frame"]:
+                    frame = getattr(player, frame_name, None)
 
-                if self.game.gameplay.clock.after_id:
-                    self.root.after_cancel(self.game.gameplay.clock.after_id)
+                    if frame:
+                        try:
+                            if frame.winfo_exists():
+                                frame.destroy()
+                        except:
+                            pass
 
-                self.player = self.game.gameplay.player
+        # Remove instruction U.I.
+        for widget_name in ["instruction_title", "movement_ins", "start_game", "back"]:
+            widget = getattr(self, widget_name, None)
 
-            self.widgets = [getattr(self.player, name, None) for name in ["victory_label", "lost_label", "play_again_button", "retry_button", "back_to_menu_button"]]
-            for widget in self.widgets:
-                if widget:
-                    widget.destroy()
+            if widget:
+                try:
+                    widget.grid_forget()
+                except:
+                    pass
+
+        # Remove game menu buttons
+        for widget_name in ["pause_resume_button", "restart_button", "save_and_quittomenu_button"]:
+            widget = getattr(self, widget_name, None)
+
+            if widget:
+                try:
+                    if widget.winfo_exists():
+                        widget.grid_forget()
+                except tk.TclError:
+                    pass
+
+        if self.instruction_after_id:
+            try:
+                self.root.after_cancel(self.instruction_after_id)
+            except tk.TclError:
+                pass
+
+            self.instruction_after_id = None
 
     # Exit the game
     def exit_game(self):
@@ -94,13 +137,31 @@ class Main_Menu:
 
         self.movement_ins = tk.Label(self.root, text = "All control movements from the player are:\n\nW - Move Up\nA - Move Left\nS - Move Down\nD - Move Right\n\nArrow Keys - Move in the respective direction", fg = "white", bg = "black", font = ("Arial", "14"))
         self.movement_ins.grid(row = 1, column = 0, sticky = "w", padx = 400, pady = 0)
-        self.root.after(3000, self.instruction_buttonsafter)
+
+        if self.instruction_after_id:
+            try:
+                self.root.after_cancel(self.instruction_after_id)
+            except tk.TclError:
+                pass
+
+        self.instruction_after_id = self.root.after(3000, self.instruction_buttonsafter)
         
         self.label.grid_forget()
         self.start.grid_forget()
         self.exit.grid_forget()
 
     def instruction_buttonsafter(self):
+        if not self.root.winfo_exists():
+            return
+        if not hasattr(self, "movement_ins"):
+            return
+        
+        try:
+            if not self.movement_ins.winfo_exists():
+                return
+        except:
+            return
+
         self.start_game_button()
         self.back_button()
 
@@ -110,12 +171,12 @@ class Main_Menu:
         self.start_game.grid(row = 4, column = 0, sticky = "w", padx = 500, pady = 10)
 
     def start_messagebox(self):
-        self.choice = messagebox.askyesnocancel(title = "Start Game", message = "Are you sure you want to start the game?\nYes - Load Game\nNo - New Game")
+        self.choice = messagebox.askyesnocancel(title = "Start Game", message = "Are you sure you want to start a new game?\nYes - New Game\nNo - Load Game")
         
         if self.choice is True:
-            self.game.save_system.load_game()
-        elif self.choice is False:
             self.game.save_system.new_game()
+        elif self.choice is False:
+            self.game.save_system.load_game()
 
     # Back to the main menu from main game title
     def back_button(self):
@@ -124,71 +185,79 @@ class Main_Menu:
 
     # Game menu button (main)
     def game_menu(self):
-        self.game_menu_button = tk.Button(self.root, text = "Game Menu", font = ("Arial", "18"), command = self.game_menu_show_n_hide)
-        self.game_menu_button.grid(row = 0, column = 0, sticky = "w", padx = 10, pady = 0)
+        if not hasattr(self, "pause_resume_button"):
+            self.pause_resume_button = tk.Button(self.root, text = "Stop", font = ("Arial", 18), command = self.pause_resume_command)
+            self.restart_button = tk.Button(self.root, text = "Restart", font = ("Arial", 18), command = self.restart_command)
+            self.save_and_quittomenu_button = tk.Button(self.root, text = "Save & Quit", font = ("Arial", 18), command = self.save_and_quit_messagebox)
 
-        self.resume_button = tk.Button(self.root, text = "Resume", font = ("Arial", "18"), command = self.resume_command)
-        self.resume_button.grid(row = 0, column = 1, sticky = "n", padx = 345, pady = 0)
+        self.pause_resume_button.config(text = "Stop")
 
-        self.restart_button = tk.Button(self.root, text = "Restart", font = ("Arial", "18"), command = self.restart_command)
-        self.restart_button.grid(row = 1, column = 2, sticky = "n", padx = 345, pady = 0)
+        self.pause_resume_button.grid(row = 0, column = 0, pady = 10)
+        self.restart_button.grid(row = 0, column = 1, pady = 10)
+        self.save_and_quittomenu_button.grid(row = 0, column = 2, pady = 10)
 
-        self.save_and_quittomenu_button = tk.Button(self.root, text = "Save & Quit", font = ("Arial", "18"), command = self.save_and_quit_messagebox)
-        self.save_and_quittomenu_button.grid(row = 2, column = 3, sticky = "n", padx = 345, pady = 0)
+    def pause_resume_command(self):
+        gameplay = self.game.gameplay
+        clock = gameplay.clock
 
-        self.resume_button.grid_forget()
-        self.restart_button.grid_forget()
-        self.save_and_quittomenu_button.grid_forget()
+        # Pause/stop button
+        if not gameplay.paused:
+            gameplay.paused = True
+            clock.running = False
 
-    def resume_command(self):
-        self.clock = self.game.gameplay.clock
+            if clock.after_id:
+                self.root.after_cancel(clock.after_id)
+                clock.after_id = None
+            self.pause_resume_button.config(text = "Play")
 
-        if not self.clock.running:
-            self.clock.running = True
-            self.clock.countdown()
+        # Resume/play button
+        else:
+            gameplay.paused = False
+            clock.running = True
+
+            self.pause_resume_button.config(text = "Stop")
+
+            clock.countdown()
 
     def restart_command(self):
+        gameplay = self.game.gameplay
+
+        gameplay.clock.running = False
+
+        if gameplay.clock.after_id:
+            self.root.after_cancel(gameplay.clock.after_id)
+            gameplay.clock.after_id = None
+
+        try:
+            if gameplay.clock.timer_label.winfo_exists():
+                gameplay.clock.timer_label.destroy()
+        except tk.TclError:
+            pass
+
+        gameplay.canvas.destroy()
+
+        self.hide_game_menu()
+
+        self.game.saved_row = 0
+        self.game.saved_column = 0
+        self.game.saved_time_remaining = 60
+
         self.game.seed = random.randint(1, 999999)
-        self.game.gameplay.clock.running = False
 
-        if self.game.gameplay.clock.after_id:
-            self.root.after_cancel(self.game.gameplay.clock.after_id)
-
-        for widget in [self.resume_button, self.restart_button, self.save_and_quittomenu_button]:
-            widget.destroy()
-
-        self.game.gameplay.clock.timer_label.destroy()
-        self.game.gameplay.canvas.destroy()
+        del self.game.gameplay
 
         self.game.start_gameplay()
 
-    # Game menu button with options (show & hide)
-    def game_menu_show_n_hide(self):
-        self.clock = self.game.gameplay.clock
-
-        if self.clock.running:
-            self.clock.running = False
-            if self.clock.after_id:
-                self.root.after_cancel(self.clock.after_id)
-
-        self.widgets = [self.resume_button, self.restart_button, self.save_and_quittomenu_button]
-
-        for widget in self.widgets:
-            if widget.winfo_ismapped():
-                widget.grid_forget()
-            else:
-                widget.grid(row = 0, column = 0, padx = 325, pady = 10, bg = "Black")
-
     def save_and_quit_messagebox(self):
         try:
-            if messagebox.askyesno(title = "Save & Quit", message = "Are you sure you want to save the file & quit the game?"):
+            if messagebox.askyesno(title = "Save & Quit", message = "Are you sure you want to quit by saving a file?"):
                 with open("save_game.txt", "w") as file:
                     self.player = self.game.gameplay.player
                     self.clock = self.game.gameplay.clock
 
                     self.save_data = f"{self.player.row},{self.player.column},{self.clock.time_remaining},{self.game.seed}"
                     file.write(self.save_data)
-                    self.main_menu()
+                    self.game.menu.main_menu()
         except FileNotFoundError:
             messagebox.showerror(title = "File Not Exist", message = "The file doesn't exist. Create file first before reading.")
         else:
@@ -196,11 +265,23 @@ class Main_Menu:
         finally:
             print("System completed.")
 
+    def hide_game_menu(self):
+        if hasattr(self, "pause_resume_button"):
+            self.pause_resume_button.grid_forget()
+
+        if hasattr(self, "restart_button"):
+            self.restart_button.grid_forget()
+
+        if hasattr(self, "save_and_quittomenu_button"):
+            self.save_and_quittomenu_button.grid_forget()
+
 class Gameplay:
     def __init__(self, game):
         self.game = game
         self.root = game.root
         self.menu = self.game.menu
+
+        self.paused = False
 
         self.menu.instruction_title.grid_forget()
         self.menu.movement_ins.grid_forget()
@@ -209,16 +290,16 @@ class Gameplay:
         self.menu.game_menu()
 
         self.canvas = tk.Canvas(self.root, width = COLUMNS * CELL_SIZE, height = ROWS * CELL_SIZE, bg = "Black")
-        self.canvas.grid(row = 5, column = 0)
+        self.canvas.grid(row = 2, column = 1, pady = 10)
 
         self.maze = Maze(self.game.seed)
         self.maze.draw_maze(self.canvas)
         
         self.player = Player(self.root, self.canvas, self.maze, self)
 
-        self.clock = Clock(self.root, 2, 0, self.player)
+        self.clock = Clock(self.root, 1, 0, self.player)
 
-        if self.game.saved_row is not None:
+        if (self.game.saved_row > 0 or self.game.saved_column > 0 or self.game.saved_time_remaining < 120):
             self.player.row = self.game.saved_row
             self.player.column = self.game.saved_column
 
@@ -241,20 +322,21 @@ class SaveSystem:
 
         self.game.saved_row = 0
         self.game.saved_column = 0
-        self.game.saved_time_remaining = 120
+        self.game.saved_time_remaining = 60
 
         self.game.start_gameplay()
 
     def load_game(self):
         try:
             with open("save_game.txt", "r") as file:
-                self.row, self.col, self.time_left, self.game.seed = map(int, file.read().split(","))
+                row, column, time_remaining, seed = map(int, file.read().split(","))
 
-                self.game.saved_row = self.row
-                self.game.saved_column = self.col
-                self.game.saved_time_remaining = self.time_left
+                self.game.saved_row = row
+                self.game.saved_column = column
+                self.game.saved_time_remaining = time_remaining
+                self.game.seed = seed
 
-                random.seed(self.game.seed)
+                random.seed(seed)
         except FileNotFoundError:
             messagebox.showerror(title = "File Not Exist", message = "The file doesn't exist. Create file first before reading.")
         except ValueError:
@@ -296,7 +378,7 @@ class Maze():
         self.stack = []
         self.current = self.grid[0][0]
         self.current.visited = True
-        random.seed(seed)
+        self.random = random.Random(seed)
 
     # Generate a maze
     def generate_maze(self):
@@ -309,7 +391,7 @@ class Maze():
                     self.neighbors.append((self.grid[self.n_row][self.n_column], wall, opp))
             
             if self.neighbors:
-                self.next_cell, wall, opp = random.choice(self.neighbors)
+                self.next_cell, wall, opp = self.random.choice(self.neighbors)
                 self.current.walls[wall] = False
                 self.next_cell.walls[opp] = False
                 self.stack.append(self.current)
@@ -337,6 +419,9 @@ class Player():
         self.maze = maze
         self.gameplay = gameplay
         self.game_finished = False
+        self.can_move = True
+        self.move_after_id = None
+        self.screen_after_id = None
 
         self.row = 0
         self.column = 0
@@ -370,6 +455,14 @@ class Player():
 
     # Check movement through the player
     def check_player_movement(self, direction):
+        try:
+            if not self.canvas.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        if self.gameplay.paused:
+            return
         if self.game_finished:
             return
 
@@ -398,11 +491,24 @@ class Player():
 
         if self.row == ROWS - 1 and self.column == COLUMNS - 1:
             self.victory_screen()
-            
-        if self.row == 10 and self.column == 10:
-            self.game_over_screen()
 
     def old_player_movement(self, direction):
+        if self.game_finished:
+            return
+
+        try:
+            if not self.canvas.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        if self.gameplay.paused:
+            return
+        if not self.can_move:
+            return
+
+        self.can_move = False
+
         self.old_row = self.row
         self.old_col = self.column
 
@@ -411,56 +517,82 @@ class Player():
 
         self.check_player_movement(direction)
 
-        if self.old_row != self.row or self.old_col != self.column:
-            self.new_x = self.column * CELL_SIZE + CELL_SIZE // 2
-            self.new_y = self.row * CELL_SIZE + CELL_SIZE // 2
+        try:
+            if (self.canvas.winfo_exists()) and (self.old_row != self.row or self.old_col != self.column):
+                self.new_x = self.column * CELL_SIZE + CELL_SIZE // 2
+                self.new_y = self.row * CELL_SIZE + CELL_SIZE // 2
 
-            self.canvas.create_line(self.old_x, self.old_y, self.new_x, self.new_y, fill = "Red", width = 2, dash = (4, 4))
+                self.canvas.create_line(self.old_x, self.old_y, self.new_x, self.new_y, fill = "Red", width = 2, dash = (4, 4))
+        except tk.TclError:
+            return
+
+        self.move_after_id = self.root.after(220, self.reset_move)
+
+    def reset_move(self):
+        if self.game_finished:
+            return
+        self.can_move = True
 
     def victory_screen(self):
         if self.game_finished:
             return
         
         self.game_finished = True
+        self.gameplay.game.menu.hide_game_menu()
+
         self.gameplay.clock.running = False
 
         if self.gameplay.clock.after_id:
             self.root.after_cancel(self.gameplay.clock.after_id)
 
-        self.canvas.grid_forget()
+        try:
+            if self.gameplay.clock.timer_label.winfo_exists():
+                self.gameplay.clock.timer_label.destroy()
+        except tk.TclError:
+            pass
+
+        for key in ["<Left>", "<Right>", "<Up>", "<Down>", "<a>", "<d>", "<w>", "<s>"]:
+            self.root.unbind(key)
         
-        self.victory_label = tk.Label(self.root, text = "You escaped the labyrinth.", fg = "White", bg = "Black", font = ("Helvetica", "40"))
-        self.victory_label.grid(row = 3, column = 0, pady = 10)
-        self.root.after(3000, self.victory_back_to_menu_buttons)
+        if self.move_after_id:
+            self.root.after_cancel(self.move_after_id)
+            self.move_after_id = None
+
+        if self.canvas.winfo_exists():
+            self.canvas.destroy()
+        
+        self.victory_frame = tk.Frame(self.root, bg = "Black")
+        self.victory_frame.place(relx = 0.5, rely = 0.5, anchor = "center")
+
+        self.victory_label = tk.Label(self.victory_frame, text = "You escaped the labyrinth.", fg = "White", bg = "Black", font = ("Helvetica", "40"))
+        self.victory_label.pack(pady = 20)
+
+        self.screen_after_id = self.root.after(3000, self.victory_back_to_menu_buttons)
 
     def victory_back_to_menu_buttons(self):
-        self.play_again_button = tk.Button(self.root, text = "Play Again", font = ("Arial", "18"), command = self.play_again_command)
-        self.play_again_button.grid(row = 7, column = 0, pady = 10)
+        if not hasattr(self, "victory_frame"):
+            return
+        if not self.victory_frame.winfo_exists():
+            return
 
-        self.save_n_back_to_main_menu = tk.Button(self.root, text = "Save & Back", font = ("Arial", "18"), command = self.save_and_return)
-        self.save_n_back_to_main_menu.grid(row = 8, column = 0, pady = 10)
+        self.play_again_button = tk.Button(self.victory_frame, text = "Play Again", font = ("Arial", "18"), command = self.play_again_command)
+        self.play_again_button.pack(pady = 10)
 
-    def save_and_return(self):
-        try:
-            self.choice = messagebox.askyesnocancel(title = "Save & Back to Main Menu", message = "Would you like to save it?")
-            if self.choice:
-                with open("save_game.txt", "w") as file:
-                    self.save_data = f"{self.row},{self.column},{self.gameplay.clock.time_remaining},{self.gameplay.game.seed}"
-                    file.write(self.save_data)
-
-                messagebox.showinfo(title = "Game Saved", message = "Your game file has been saved.")
-            self.gameplay.game.menu.main_menu()
-        except FileNotFoundError:
-            messagebox.showerror(title = "File Not Exist", message = "The file doesn't exist. Create file first before reading.")
-        finally:
-            print("System completed.")
+        self.back_to_menu_button = tk.Button(self.victory_frame, text = "Back to Main Menu", font = ("Arial", "18"), command = self.back_to_main_menu)
+        self.back_to_menu_button.pack(pady = 10)
 
     def play_again_command(self):
-        self.victory_label.destroy()
-        self.play_again_button.destroy()
-        self.save_n_back_to_main_menu.destroy()
+        if self.screen_after_id:
+            self.root.after_cancel(self.screen_after_id)
+            self.screen_after_id = None
 
-        self.canvas.destroy()
+        self.victory_frame.destroy()
+
+        self.gameplay.game.saved_row = 0
+        self.gameplay.game.saved_column = 0
+        self.gameplay.game.saved_time_remaining = 60
+
+        self.gameplay.game.seed = random.randint(1, 999999)
 
         self.gameplay.game.start_gameplay()
 
@@ -469,37 +601,64 @@ class Player():
             return
         
         self.game_finished = True
-        self.gameplay.clock.running = False
+        self.gameplay.game.menu.hide_game_menu()
 
         self.gameplay.clock.running = False
 
         if self.gameplay.clock.after_id:
             self.root.after_cancel(self.gameplay.clock.after_id)
 
-        self.canvas.grid_forget()
+        try:
+            if self.gameplay.clock.timer_label.winfo_exists():
+                self.gameplay.clock.timer_label.destroy()
+        except tk.TclError:
+            pass
 
-        self.lost_label = tk.Label(self.root, text = "YOU LOST.", fg = "Red", bg = "Black", font = ("Helvetica", "40"))
-        self.lost_label.grid(row = 3, column = 0, pady = 20)
-        self.root.after(3000, self.loss_back_to_menu_buttons)
+        for key in ["<Left>", "<Right>", "<Up>", "<Down>", "<a>", "<d>", "<w>", "<s>"]:
+            self.root.unbind(key)
+
+        if self.move_after_id:
+            self.root.after_cancel(self.move_after_id)
+            self.move_after_id = None
+
+        if self.canvas.winfo_exists():
+            self.canvas.destroy()
+
+        self.lost_frame = tk.Frame(self.root, bg = "Black")
+        self.lost_frame.place(relx = 0.5, rely = 0.5, anchor = "center")
+
+        self.lost_label = tk.Label(self.lost_frame, text = "YOU LOST.", fg = "Red", bg = "Black", font = ("Helvetica", "40"))
+        self.lost_label.pack(pady = 20)
+
+        self.screen_after_id = self.root.after(3000, self.loss_back_to_menu_buttons)
 
     def loss_back_to_menu_buttons(self):
-        self.retry_button = tk.Button(self.root, text = "Retry", font = ("Arial", "18"), command = self.try_again_command)
-        self.retry_button.grid(row = 7, column = 0, pady = 10)
+        if not hasattr(self, "lost_frame"):
+            return
+        if not self.loss_frame.winfo_exists():
+            return
 
-        self.back_to_menu_button = tk.Button(self.root, text = "Back to Main Menu", font = ("Arial", "18"), command = self.back_to_main_menu)
-        self.back_to_menu_button.grid(row = 8, column = 0, pady = 10)
+        self.retry_button = tk.Button(self.lost_frame, text = "Retry", font = ("Arial", "18"), command = self.try_again_command)
+        self.retry_button.pack(pady = 10)
+
+        self.back_to_menu_button = tk.Button(self.lost_frame, text = "Back to Main Menu", font = ("Arial", "18"), command = self.back_to_main_menu)
+        self.back_to_menu_button.pack(pady = 10)
 
     def back_to_main_menu(self):
-        self.game.menu.main_menu()
-        self.game.menu.game_menu.grid_forget()
-        self.clock.timer_label.grid_forget()
+        self.gameplay.game.menu.main_menu()
 
     def try_again_command(self):
-        self.lost_label.destroy()
-        self.retry_button.destroy()
-        self.back_to_menu_button.destroy()
+        if self.screen_after_id:
+            self.root.after_cancel(self.screen_after_id)
+            self.screen_after_id = None
 
-        self.canvas.destroy()
+        self.lost_frame.destroy()
+
+        self.gameplay.game.saved_row = 0
+        self.gameplay.game.saved_column = 0
+        self.gameplay.game.saved_time_remaining = 60
+
+        self.gameplay.game.seed = random.randint(1, 999999)
 
         self.gameplay.game.start_gameplay()
 
@@ -512,25 +671,37 @@ class Clock():
         self.after_id = None
 
         self.timer_label = tk.Label(self.root, text = "00:00", fg = "White", bg = "Black", font = ("Arial", "18"))
-        self.timer_label.grid(row = 2, column = 0, pady = 10)
+        self.timer_label.grid(row = 1, column = 1, pady = 10)
 
         self.countdown()
 
     def countdown(self):
-        if not self.running or self.player.game_finished:
+        if not self.running:
+            self.after_id = None
             return
-        
+
+        if self.player.game_finished:
+            self.after_id = None
+            return
+
         minutes = self.time_remaining // 60
         seconds = self.time_remaining % 60
 
-        self.timer_label.config(text = f"{minutes:02d}:{seconds:02d}")
+        self.timer_label.config(text=f"{minutes:02d}:{seconds:02d}")
 
-        if self.time_remaining > 0:
-            self.time_remaining -= 1
-            self.after_id = self.root.after(1000, self.countdown)
-        else:
+        if self.time_remaining <= 0:
             self.running = False
-            self.player.game_over_screen()
+
+            if self.after_id:
+                self.root.after_cancel(self.after_id)
+                self.after_id = None
+            if not self.player.game_finished:
+                self.player.game_over_screen()
+                return
+
+        self.time_remaining -= 1
+
+        self.after_id = self.root.after(1000, self.countdown)
 
 # Main game
 if __name__ == "__main__":
